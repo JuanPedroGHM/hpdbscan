@@ -24,6 +24,7 @@
 #include <omp.h>
 #include <parallel/algorithm>
 #include <vector>
+#include <immintrin.h>
 
 #ifdef WITH_OUTPUT
 #include <iostream>
@@ -740,18 +741,63 @@ public:
                          const Clusters& clusters, std::vector<size_t>& min_points_area) const {
         const size_t dimensions = m_data.m_chunk[1];
         const T* point = static_cast<T*>(m_data.m_p) + point_index * dimensions;
+        const size_t precision = sizeof(T);
         Cluster cluster_label = m_global_point_offset + point_index + 1;
-
+        
         // iterate through all neighboring points and check whether they are in range
         for (size_t neighbor: neighboring_points) {
             T offset = 0.0;
             const T* other_point = static_cast<T*>(m_data.m_p) + neighbor * dimensions;
 
+            #ifdef __AVX512F__
+            const size_t ElementsPerAVX = sizeof(__m512) / precision;
+            
+            size_t d;
+            for (d = 0; d <= dimensions - NumElementsPerAvx512; d += NumElementsPerAvx512) {
+                if (precision == 32){
+                    __m512 pointVec = _mm512_loadu_ps(&point[d]);
+                    __m512 otherVec = _mm512_loadu_ps(&other_point[d]);
+                    __m512 diffVec = _mm512_sub_ps(pointVec, otherVec);
+                    __m512 squareVec = _mm512_mul_ps(diffVec, diffVec);
+                    offset += _mm512_reduce_add_ps(squareVec);
+                } elif (precision == 64) {
+                    __m512 pointVec = _mm512_loadu_pd(&point[d]);
+                    __m512 otherVec = _mm512_loadu_pd(&other_point[d]);
+                    __m512 diffVec = _mm512_sub_pd(pointVec, otherVec);
+                    __m512 squareVec = _mm512_mul_pd(diffVec, diffVec);
+                    offset += _mm512_reduce_add_pd(squareVec);
+                }
+            }
+
+            // Process the remaining elements using AVX-512
+            if (precision == 32){
+                __mmask16 remainingMask = (1 << (dimensions - d)) - 1;
+                __m512i mask = _mm512_int2mask(remainingMask);
+                __m512 pointVec = _mm512_maskz_loadu_ps(mask, &point[d]);
+                __m512 otherVec = _mm512_maskz_loadu_ps(mask, &other_point[d]);
+                __m512 diffVec = _mm512_sub_ps(pointVec, otherVec);
+                __m512 squareVec = _mm512_mul_ps(diffVec, diffVec);
+                offset += _mm512_mask_reduce_add_ps(mask, squareVec);
+ 
+            } elif (precision == 64){
+                
+                __mmask8 remainingMask = (1 << (dimensions - d)) - 1;
+                __m512i mask = _mm512_int2mask(remainingMask);
+                __m512 pointVec = _mm512_maskz_loadu_pd(mask, &point[d]);
+                __m512 otherVec = _mm512_maskz_loadu_pd(mask, &other_point[d]);
+                __m512 diffVec = _mm512_sub_pd(pointVec, otherVec);
+                __m512 squareVec = _mm512_mul_pd(diffVec, diffVec);
+                offset += _mm512_mask_reduce_add_pd(mask, squareVec);
+            }
+            #else
+            
             // determine euclidean distance to other point
             for (size_t d = 0; d < dimensions; ++d) {
-		const T distance = point[d] - other_point[d];
+		        const T distance = point[d] - other_point[d];
                 offset += distance * distance;
             }
+            
+            #endif
             // .. if in range, add it to the vector with in range points
             if (offset <= EPS2) {
                 const Cluster neighbor_label = clusters[neighbor];
@@ -763,9 +809,9 @@ public:
                 }
             }
         }
-
         return cluster_label;
     }
+
 
     void recover_initial_order(Clusters& clusters) {
         const hsize_t dimensions = m_data.m_chunk[1];
