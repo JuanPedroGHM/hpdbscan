@@ -9,8 +9,8 @@ ENABLE_LANGUAGE(CXX)
 SET(CMAKE_CXX_STANDARD 11)
 
 # set build options
-SET(CMAKE_CXX_FLAGS "-Ofast -Wall -Wextra -march=native")
-SET(CMAKE_CXX_FLAGS_DEBUG "-g")
+SET(CMAKE_CXX_FLAGS "-Ofast -Wall -Wextra -march=skylake-avx512")
+SET(CMAKE_CXX_FLAGS_DEBUG "-g -c -Ofast -march=skylake-avx512")
 
 # add the include and source directories
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include)
