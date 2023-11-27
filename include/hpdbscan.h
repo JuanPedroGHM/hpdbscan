@@ -22,6 +22,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <unordered_set>
 
 #ifdef WITH_MPI
 #include <mpi.h>
@@ -72,6 +73,7 @@ class HPDBSCAN {
             std::vector<size_t> min_points_area;
             Cluster cluster_label = NOISE;
             if (neighboring_points.size() >= m_min_points) {
+                std::cout << "About to query points" << std::endl;
                 cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area);
             }
 
@@ -381,7 +383,7 @@ public:
             if (m_rank == 0) {
             #endif
             std::cout << "Clustering..." << std::endl;
-            std::cout << "\tDBSCAN...              " << std::flush;
+            std::cout << "\tDBSCAN............              " << std::endl;
             #ifdef WITH_MPI
             }
             #endif

@@ -21,8 +21,11 @@ ADD_LIBRARY(hpdbscan SHARED src/hpdbscan.cpp)
 # set up the cli executable
 ADD_EXECUTABLE(hpdbscan-bin src/cli.cpp)
 
+add_compile_definitions(WITH_OUTPUT)
+add_compile_definitions(WITH_AVX512)
+
 # define options
-TARGET_COMPILE_DEFINITIONS(hpdbscan-bin PRIVATE WITH_OUTPUT)
+TARGET_COMPILE_DEFINITIONS(hpdbscan-bin PRIVATE)
 
 # check dependencies
 ## mpi, optional for distributed computing

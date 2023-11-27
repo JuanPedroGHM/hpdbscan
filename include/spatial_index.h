@@ -24,7 +24,10 @@
 #include <omp.h>
 #include <parallel/algorithm>
 #include <vector>
+
+#ifdef WITH_AVX512
 #include <immintrin.h>
+#endif
 
 #ifdef WITH_OUTPUT
 #include <iostream>
