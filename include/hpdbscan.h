@@ -51,6 +51,14 @@ class HPDBSCAN {
 
     template <typename T>
     Rules local_dbscan(Clusters& clusters, const SpatialIndex<T>& index) {
+
+        #ifdef WITH_OUTPUT
+            #ifdef WITH_AVX512
+                std::cout << "Running with AVX512" << std::endl;
+            #else
+                std::cout << "Running normally" << std::endl;
+            #endif
+        #endif
         const float EPS2 = m_epsilon * m_epsilon;
         const size_t lower = index.lower_halo_bound();
         const size_t upper = index.upper_halo_bound();
@@ -73,7 +81,6 @@ class HPDBSCAN {
             std::vector<size_t> min_points_area;
             Cluster cluster_label = NOISE;
             if (neighboring_points.size() >= m_min_points) {
-                std::cout << "About to query points" << std::endl;
                 cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area);
             }
 

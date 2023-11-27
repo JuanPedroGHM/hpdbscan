@@ -752,58 +752,57 @@ public:
             T offset = 0.0;
             const T* other_point = static_cast<T*>(m_data.m_p) + neighbor * dimensions;
 
-            std::cout << "Berforeöaldfjslaiji" << std::endl;
             #ifdef WITH_AVX512
-                #ifdef WITH_OUTPUT
-                    std::cout << "avx" << std::endl;
-                #endif
-
                 const size_t ElementsPerAVX = sizeof(__m512) / precision;
+                // std::cout << "Dimensions: " << dimensions << ", Precision: "  << precision << ", Elements: " << ElementsPerAVX << std::endl;
                 
-                size_t d;
-                for (d = 0; d <= dimensions - ElementsPerAVX; d += ElementsPerAVX) {
-                    if (precision == 32){
-                        __m512 pointVec = _mm512_load_ps(&point[d]);
-                        __m512 otherVec = _mm512_load_ps(&other_point[d]);
-                        __m512 diffVec = _mm512_sub_ps(pointVec, otherVec);
-                        __m512 squareVec = _mm512_mul_ps(diffVec, diffVec);
-                        offset += _mm512_reduce_add_ps(squareVec);
-                    } else if (precision == 64) {
-                        __m512d pointVec = _mm512_load_pd(&point[d]);
-                        __m512d otherVec = _mm512_load_pd(&other_point[d]);
-                        __m512d diffVec = _mm512_sub_pd(pointVec, otherVec);
-                        __m512d squareVec = _mm512_mul_pd(diffVec, diffVec);
-                        offset += _mm512_reduce_add_pd(squareVec);
+                size_t d = 0;
+                if (dimensions >= ElementsPerAVX) {
+                    for (d = 0; d <= dimensions - ElementsPerAVX; d += ElementsPerAVX) {
+                        if (precision == 4){
+                            // std::cout << "loop 32" << std::endl;
+                            __m512 pointVec = _mm512_loadu_ps(&point[d]);
+                            __m512 otherVec = _mm512_loadu_ps(&other_point[d]);
+                            __m512 diffVec = _mm512_sub_ps(pointVec, otherVec);
+                            __m512 squareVec = _mm512_mul_ps(diffVec, diffVec);
+                            offset += _mm512_reduce_add_ps(squareVec);
+                        } else if (precision == 8) {
+                            // std::cout << "loop 64" << std::endl;
+                            __m512d pointVec = _mm512_loadu_pd(&point[d]);
+                            __m512d otherVec = _mm512_loadu_pd(&other_point[d]);
+                            __m512d diffVec = _mm512_sub_pd(pointVec, otherVec);
+                            __m512d squareVec = _mm512_mul_pd(diffVec, diffVec);
+                            offset += _mm512_reduce_add_pd(squareVec);
+                        }
                     }
                 }
 
                 // Process the remaining elements using AVX-512
-                if (precision == 32){
+                if (precision == 4){
+                    // std::cout << "redidue 32" << std::endl;
                     __mmask16 remainingMask = (1 << (dimensions - d)) - 1;
-                    __m512 pointVec = _mm512_maskz_load_ps(remainingMask, &point[d]);
-                    __m512 otherVec = _mm512_maskz_load_ps(remainingMask, &other_point[d]);
-                    __m512 diffVec = _mm512_sub_ps(pointVec, otherVec);
-                    __m512 squareVec = _mm512_mul_ps(diffVec, diffVec);
+                    __m512 pointVec = _mm512_maskz_loadu_ps(remainingMask, &point[d]);
+                    __m512 otherVec = _mm512_maskz_loadu_ps(remainingMask, &other_point[d]);
+                    __m512 diffVec = _mm512_maskz_sub_ps(remainingMask, pointVec, otherVec);
+                    __m512 squareVec = _mm512_maskz_mul_ps(remainingMask, diffVec, diffVec);
                     offset += _mm512_mask_reduce_add_ps(remainingMask, squareVec);
      
-                } else if (precision == 64){
-                    
+                } else if (precision == 8){
+                    // std::cout << "redidue 64" << std::endl;
                     __mmask8 remainingMask = (1 << (dimensions - d)) - 1;
                     __m512d pointVec = _mm512_maskz_loadu_pd(remainingMask, &point[d]);
                     __m512d otherVec = _mm512_maskz_loadu_pd(remainingMask, &other_point[d]);
-                    __m512d diffVec = _mm512_sub_pd(pointVec, otherVec);
-                    __m512d squareVec = _mm512_mul_pd(diffVec, diffVec);
+                    __m512d diffVec = _mm512_maskz_sub_pd(remainingMask, pointVec, otherVec);
+                    __m512d squareVec = _mm512_maskz_mul_pd(remainingMask, diffVec, diffVec);
                     offset += _mm512_mask_reduce_add_pd(remainingMask, squareVec);
                 }
             #else
             // determine euclidean distance to other point
-                #ifdef WITH_OUTPUT
-                    std::cout << "Not avx" << std::endl;
-                #endif
                 for (size_t d = 0; d < dimensions; ++d) {
                     const T distance = point[d] - other_point[d];
                     offset += distance * distance;
                 }
+                // std::cout << "Offset : " << offset << ", Original: " << other_offset << ", Diff: " << offset - other_offset << std::endl;
             
             #endif
             // .. if in range, add it to the vector with in range points
