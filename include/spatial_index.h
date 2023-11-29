@@ -745,7 +745,6 @@ public:
         alignas(64) int result[16];
         _mm512_store_si512(result, vec);
 
-        std::cout << "Vector elements: ";
         for (int i = 0; i < 16; ++i) {
             std::cout << result[i] << " ";
         }
@@ -756,7 +755,6 @@ public:
         alignas(64) float result[16];
         _mm512_store_ps(result, vec);
 
-        std::cout << "Vector elements: ";
         for (int i = 0; i < 16; ++i) {
             std::cout << result[i] << " ";
         }
@@ -801,7 +799,6 @@ public:
         // std::cout << "V_NOT_VISITED: ";
         // print_m512i(v_NOT_VISITED);
 
-
         for (uint32_t i = 0; i < npoints; i += ElementsPerAVX){
             // Mask
             __mmask16 mask = ( npoints - i > ElementsPerAVX ) ? (1 << 16) - 1 : ((1 << ( npoints - i )) - 1);
@@ -824,24 +821,21 @@ public:
                 // print_m512(v_current_point_dim);
                 // Scale indices
                 // Load dimension d of other points (shifting base address to match current dimension, and scaling the indices by number of dimensions)
-                __m512i v_current_dim = _mm512_set1_epi32(d);
-                __m512i v_other_points_idx = _mm512_mask_add_epi32(v_zero_epi32, mask, v_indices_scaled, v_current_dim);
-                __m512 v_other_points_dim = _mm512_mask_i32gather_ps(v_zero_ps, mask, v_other_points_idx, np_ptr + d, 4);
-                // std::cout << "V_OTHER_POINTS_DIM: ";
-                // print_m512(v_other_points_dim);
+                __m512 v_other_points_dim = _mm512_mask_i32gather_ps(v_zero_ps, mask, v_indices_scaled, np_ptr + d, 4);
+
                 // Get the diff
                 __m512 v_diff = _mm512_maskz_sub_ps(mask, v_current_point_dim, v_other_points_dim);
                 // std::cout << "V_DIFF: ";
                 // print_m512(v_diff);
+                
                 // Square that diff
                 __m512 v_sqrd = _mm512_maskz_mul_ps(mask, v_diff, v_diff);
                 // std::cout << "V_SQRD: ";
                 // print_m512(v_sqrd);
+
                 // Add to results
                 v_results = _mm512_maskz_add_ps(mask, v_results, v_sqrd);   
             }
-            // std::cout << "V_RESULTS: ";
-            // print_m512(v_results);
 
             // Mark entries where the result is less than epsilon^2
             __mmask16 v_eps_mask = _mm512_mask_cmple_ps_mask(mask, v_results, v_eps);
@@ -850,11 +844,6 @@ public:
 
             // Load cluster labels of close entries
             __m512i v_cluster_labels = _mm512_mask_i32gather_epi32(v_zero_epi32, v_eps_mask, v_indices, &clusters[0], 4);
-            // if (count > 0){
-
-            //     std::cout << "V_CLUSTER_LABELS: ";
-            //     print_m512i(v_cluster_labels);
-            // }
             
             // filter labels that are not visited and that are less than zero
             __mmask16 v_not_visited = _mm512_mask_cmpneq_epi32_mask(v_eps_mask, v_cluster_labels, v_NOT_VISITED);
