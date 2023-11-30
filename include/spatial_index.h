@@ -806,7 +806,7 @@ public:
             __m512i v_indices = _mm512_maskz_loadu_epi32(mask, &neighboring_points[i]);
             // std::cout << "V_INDICES: ";
             // print_m512i(v_indices);
-            __m512i v_indices_scaled = _mm512_maskz_mullo_epi32(mask, v_indices, v_dims);
+            __m512i v_indices_scaled = _mm512_mullo_epi32(v_indices, v_dims);
             // std::cout << "V_INDICES_SCALED: ";
             // print_m512i(v_indices_scaled);
             
@@ -824,17 +824,17 @@ public:
                 __m512 v_other_points_dim = _mm512_mask_i32gather_ps(v_zero_ps, mask, v_indices_scaled, np_ptr + d, 4);
 
                 // Get the diff
-                __m512 v_diff = _mm512_maskz_sub_ps(mask, v_current_point_dim, v_other_points_dim);
+                __m512 v_diff = _mm512_sub_ps(v_current_point_dim, v_other_points_dim);
                 // std::cout << "V_DIFF: ";
                 // print_m512(v_diff);
                 
                 // Square that diff
-                __m512 v_sqrd = _mm512_maskz_mul_ps(mask, v_diff, v_diff);
+                __m512 v_sqrd = _mm512_mul_ps(v_diff, v_diff);
                 // std::cout << "V_SQRD: ";
                 // print_m512(v_sqrd);
 
                 // Add to results
-                v_results = _mm512_maskz_add_ps(mask, v_results, v_sqrd);   
+                v_results = _mm512_add_ps(v_results, v_sqrd);   
             }
 
             // Mark entries where the result is less than epsilon^2
@@ -846,11 +846,11 @@ public:
             __m512i v_cluster_labels = _mm512_mask_i32gather_epi32(v_zero_epi32, v_eps_mask, v_indices, &clusters[0], 4);
             
             // filter labels that are not visited and that are less than zero
-            __mmask16 v_not_visited = _mm512_mask_cmpneq_epi32_mask(v_eps_mask, v_cluster_labels, v_NOT_VISITED);
-            __mmask16 v_less_than_zero = _mm512_mask_cmplt_epi32_mask(v_eps_mask, v_cluster_labels, v_zero_epi32);
+            __mmask16 v_not_visited = _mm512_cmpneq_epi32_mask(v_cluster_labels, v_NOT_VISITED);
+            __mmask16 v_less_than_zero = _mm512_cmplt_epi32_mask(v_cluster_labels, v_zero_epi32);
             __mmask16 v_and_mask = _kand_mask16(v_not_visited, v_less_than_zero);
             
-            v_cluster_labels = _mm512_maskz_abs_epi32(v_and_mask, v_cluster_labels);
+            v_cluster_labels = _mm512_abs_epi32(v_cluster_labels);
             // std::cout << "V_CLUSTER_LABELS: ";
             // print_m512i(v_cluster_labels);
             
