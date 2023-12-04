@@ -9,8 +9,8 @@ ENABLE_LANGUAGE(CXX)
 SET(CMAKE_CXX_STANDARD 11)
 
 # set build options
-SET(CMAKE_CXX_FLAGS "-Ofast -Wall -Wextra")
-SET(CMAKE_CXX_FLAGS_DEBUG "-g")
+SET(CMAKE_CXX_FLAGS "-Ofast -Wall -Wextra -march=skylake-avx512")
+SET(CMAKE_CXX_FLAGS_DEBUG "-g -c -Ofast -march=skylake-avx512")
 
 # add the include and source directories
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -22,7 +22,7 @@ ADD_LIBRARY(hpdbscan SHARED src/hpdbscan.cpp)
 ADD_EXECUTABLE(hpdbscan-bin src/cli.cpp)
 
 # define options
-TARGET_COMPILE_DEFINITIONS(hpdbscan-bin PRIVATE WITH_OUTPUT)
+TARGET_COMPILE_DEFINITIONS(hpdbscan-bin PRIVATE WITH_OUTPUT WITH_AVX512)
 
 # check dependencies
 ## mpi, optional for distributed computing
