@@ -70,27 +70,29 @@ class HPDBSCAN {
             }
 
             std::vector<size_t> min_points_area;
+	    size_t count = 0;
             Cluster cluster_label = NOISE;
             if (neighboring_points.size() >= m_min_points) {
-                cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area);
+                cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area, count);
             }
 
-            if (min_points_area.size() >= m_min_points) {
+            if (count >= m_min_points) {
                 // set the label to be negative as to mark it as core point
-                atomic_min(clusters.data() + point, -cluster_label);
+                clusters[point] =  -cluster_label;
 
-                for (size_t other : min_points_area) {
-                    // get the absolute value here, we are only interested what cluster it is not in the core property
-                    Cluster other_cluster_label = std::abs(clusters[other]);
-                    // check whether the other point is a cluster
-                    if (clusters[other] < 0) {
-                        const std::pair<Cluster, Cluster> minmax = std::minmax(cluster_label, other_cluster_label);
-                        rules.update(minmax.second, minmax.first);
+                for (auto& pt :min_points_area) {
+
+                    if(pt != INT_MAX) {
+                        // check whether the other point is a cluster
+                        if (clusters[pt] < 0) {
+                            rules.update(std::abs(clusters[pt]), cluster_label);
+                        }
+                        // mark as a border point
+                        atomic_min(clusters.data() + pt, cluster_label);
                     }
-                    // mark as a border point
-                    atomic_min(clusters.data() + other, cluster_label);
                 }
-            }
+	    
+	    }
             else if (clusters[point] == NOT_VISITED) {
                 // mark as noise
                 atomic_min(clusters.data() + point, NOISE);
