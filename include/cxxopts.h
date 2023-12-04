@@ -25,7 +25,6 @@ THE SOFTWARE.
 #ifndef CXXOPTS_HPP_INCLUDED
 #define CXXOPTS_HPP_INCLUDED
 
-#include <limits>
 #include <cstring>
 #include <cctype>
 #include <exception>
@@ -38,6 +37,7 @@ THE SOFTWARE.
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <limits>
 
 #ifdef __cpp_lib_optional
 #include <optional>

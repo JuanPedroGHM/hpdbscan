@@ -22,6 +22,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <unordered_set>
 
 #ifdef WITH_MPI
 #include <mpi.h>
@@ -48,15 +49,17 @@ class HPDBSCAN {
     int m_size;
     #endif
 
+    #ifdef WITH_AVX512
     template <typename T>
     Rules local_dbscan(Clusters& clusters, const SpatialIndex<T>& index) {
+
         const float EPS2 = m_epsilon * m_epsilon;
         const size_t lower = index.lower_halo_bound();
         const size_t upper = index.upper_halo_bound();
 
         Rules rules;
         Cell previous_cell = NOT_VISITED;
-        std::vector<size_t> neighboring_points;
+        std::vector<uint32_t> neighboring_points;
 
         // local DBSCAN run
         #pragma omp parallel for schedule(dynamic, 32) private(neighboring_points) firstprivate(previous_cell) reduction(merge: rules)
@@ -69,8 +72,8 @@ class HPDBSCAN {
                 previous_cell = current_cell;
             }
 
-            std::vector<size_t> min_points_area;
-	    size_t count = 0;
+            std::vector<uint32_t> min_points_area;
+            int32_t count = 0;
             Cluster cluster_label = NOISE;
             if (neighboring_points.size() >= m_min_points) {
                 cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area, count);
@@ -78,21 +81,23 @@ class HPDBSCAN {
 
             if (count >= m_min_points) {
                 // set the label to be negative as to mark it as core point
-                clusters[point] =  -cluster_label;
+                atomic_min(clusters.data() + point, -cluster_label);
 
-                for (auto& pt :min_points_area) {
-
-                    if(pt != INT_MAX) {
-                        // check whether the other point is a cluster
-                        if (clusters[pt] < 0) {
-                            rules.update(std::abs(clusters[pt]), cluster_label);
-                        }
+                for (size_t other : min_points_area) {
+                    // get the absolute value here, we are only interested what cluster it is not in the core property
+                    // check whether the other point is a cluster
+		    if(other != INT_MAX) {
+                        
+			if (clusters[other] < 0) {
+                             
+			    rules.update(std::abs(clusters[other]), cluster_label);
+                        
+			}
                         // mark as a border point
-                        atomic_min(clusters.data() + pt, cluster_label);
+                        atomic_min(clusters.data() + other, cluster_label);
                     }
-                }
-	    
-	    }
+		}
+            }
             else if (clusters[point] == NOT_VISITED) {
                 // mark as noise
                 atomic_min(clusters.data() + point, NOISE);
@@ -101,6 +106,60 @@ class HPDBSCAN {
 
         return rules;
     }
+    #else
+    template <typename T>
+    Rules local_dbscan(Clusters& clusters, const SpatialIndex<T>& index) {
+
+        const float EPS2 = m_epsilon * m_epsilon;
+        const size_t lower = index.lower_halo_bound();
+        const size_t upper = index.upper_halo_bound();
+
+        Rules rules;
+        Cell previous_cell = NOT_VISITED;
+        std::vector<uint32_t> neighboring_points;
+
+        // local DBSCAN run
+        #pragma omp parallel for schedule(dynamic, 32) private(neighboring_points) firstprivate(previous_cell) reduction(merge: rules)
+        for (size_t point = lower; point < upper; ++point) {
+            // small optimization, we only perform a neighborhood query if it is a new cell
+            Cell current_cell = index.cell_of(point);
+
+            if (current_cell != previous_cell) {
+                neighboring_points = index.get_neighbors(current_cell);
+                previous_cell = current_cell;
+            }
+
+            std::vector<uint32_t> min_points_area;
+            Cluster cluster_label = NOISE;
+            if (neighboring_points.size() >= m_min_points) {
+                cluster_label = index.region_query(point, neighboring_points, EPS2, clusters, min_points_area);
+            }
+
+            if (min_points_area.size() >= m_min_points) {
+                // set the label to be negative as to mark it as core point
+                atomic_min(clusters.data() + point, -cluster_label);
+
+                for (size_t other : min_points_area) {
+                    // get the absolute value here, we are only interested what cluster it is not in the core property
+                    Cluster other_cluster_label = std::abs(clusters[other]);
+                    // check whether the other point is a cluster
+                    if (clusters[other] < 0) {
+                        const std::pair<Cluster, Cluster> minmax = std::minmax(cluster_label, other_cluster_label);
+                        rules.update(minmax.second, minmax.first);
+                    }
+                    // mark as a border point
+                    atomic_min(clusters.data() + other, cluster_label);
+                }
+            }
+            else if (clusters[point] == NOT_VISITED) {
+                // mark as noise
+                atomic_min(clusters.data() + point, NOISE);
+            }
+        }
+
+        return rules;
+    }
+    #endif  
 
     #ifdef WITH_MPI
     template <typename T>
@@ -131,8 +190,8 @@ class HPDBSCAN {
         Cluster halo_labels[total_items_to_receive];
 
         MPI_Alltoallv(
-            clusters.data(), send_counts, send_displs, MPI_LONG,
-            halo_labels, recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            clusters.data(), send_counts, send_displs, MPI_INT,
+            halo_labels, recv_counts, recv_displs, MPI_INT, MPI_COMM_WORLD
         );
 
         // update the local clusters with the received information
@@ -188,8 +247,8 @@ class HPDBSCAN {
         // exchange the rules and update the own rules
         Cluster incoming_rules[total];
         MPI_Alltoallv(
-            serialized_rules, send_counts, send_displs, MPI_LONG,
-            incoming_rules, recv_counts, recv_displs, MPI_LONG, MPI_COMM_WORLD
+            serialized_rules, send_counts, send_displs, MPI_INT,
+            incoming_rules, recv_counts, recv_displs, MPI_INT, MPI_COMM_WORLD
         );
         for (size_t i = 0; i < total; i += 2) {
             rules.update(incoming_rules[i], incoming_rules[i + 1]);
@@ -264,8 +323,8 @@ class HPDBSCAN {
 
         // collect the individual unique clusters on the MPI root into a global buffer
         MPI_Gatherv(
-            local_buffer.data(), number_of_unique_clusters, MPI_LONG,
-            global_buffer.data(), set_counts, set_displs, MPI_LONG, 0, MPI_COMM_WORLD
+            local_buffer.data(), number_of_unique_clusters, MPI_INT,
+            global_buffer.data(), set_counts, set_displs, MPI_INT, 0, MPI_COMM_WORLD
         );
         // accumulate the metrics of each node
         MPI_Reduce(
@@ -383,7 +442,7 @@ public:
             if (m_rank == 0) {
             #endif
             std::cout << "Clustering..." << std::endl;
-            std::cout << "\tDBSCAN...              " << std::flush;
+            std::cout << "\tDBSCAN............              " << std::endl;
             #ifdef WITH_MPI
             }
             #endif

@@ -34,7 +34,7 @@ struct Dataset {
         std::copy(shape, shape + 2, m_chunk);
 
         m_type = H5Tcopy(type);
-        m_p = malloc(shape[0] * shape[1] * H5Tget_precision(type) / BITS_PER_BYTE);
+        m_p = aligned_alloc(64, shape[0] * shape[1] * H5Tget_precision(type) / BITS_PER_BYTE);
     }
 
     template <typename T>
