@@ -795,10 +795,6 @@ public:
         // std::cout << "V_DIMS: ";
         // print_m512i(v_dims);
 
-        __m512i v_NOT_VISITED = _mm512_set1_epi32(NOT_VISITED);
-        // std::cout << "V_NOT_VISITED: ";
-        // print_m512i(v_NOT_VISITED);
-
         for (uint32_t i = 0; i < npoints; i += ElementsPerAVX){
             // Mask
             __mmask16 mask = ( npoints - i > ElementsPerAVX ) ? (1 << 16) - 1 : ((1 << ( npoints - i )) - 1);
@@ -846,16 +842,12 @@ public:
             __m512i v_cluster_labels = _mm512_mask_i32gather_epi32(v_zero_epi32, v_eps_mask, v_indices, &clusters[0], 4);
             
             // filter labels that are not visited and that are less than zero
-            __mmask16 v_not_visited = _mm512_cmpneq_epi32_mask(v_cluster_labels, v_NOT_VISITED);
             __mmask16 v_less_than_zero = _mm512_cmplt_epi32_mask(v_cluster_labels, v_zero_epi32);
-            __mmask16 v_and_mask = _kand_mask16(v_not_visited, v_less_than_zero);
             
             v_cluster_labels = _mm512_abs_epi32(v_cluster_labels);
-            // std::cout << "V_CLUSTER_LABELS: ";
-            // print_m512i(v_cluster_labels);
             
             // set min cluster label
-            cluster_label = std::min(cluster_label, _mm512_mask_reduce_min_epi32(v_and_mask, v_cluster_labels));
+            cluster_label = std::min(cluster_label, _mm512_mask_reduce_min_epi32(v_less_than_zero, v_cluster_labels));
             // std::cout << "cluster label: " << cluster_label << std::endl;
         
             // store min_points_area
@@ -868,7 +860,6 @@ public:
                          const Clusters& clusters, std::vector<uint32_t>& min_points_area) const {
         const size_t dimensions = m_data.m_chunk[1];
         const T* point = static_cast<T*>(m_data.m_p) + point_index * dimensions;
-        const size_t precision = sizeof(T);
         Cluster cluster_label = m_global_point_offset + point_index + 1;
         
         // iterate through all neighboring points and check whether they are in range

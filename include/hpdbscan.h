@@ -85,19 +85,21 @@ class HPDBSCAN {
             if (count >= m_min_points) {
                 // set the label to be negative as to mark it as core point
                 atomic_min(clusters.data() + point, -cluster_label);
-                min_points_area.erase(std::remove(min_points_area.begin(), min_points_area.end(), INT_MAX), min_points_area.end());
 
                 for (size_t other : min_points_area) {
                     // get the absolute value here, we are only interested what cluster it is not in the core property
-                    Cluster other_cluster_label = std::abs(clusters[other]);
                     // check whether the other point is a cluster
-                    if (clusters[other] < 0) {
-                        const std::pair<Cluster, Cluster> minmax = std::minmax(cluster_label, other_cluster_label);
-                        rules.update(minmax.second, minmax.first);
+                    if(other != INT_MAX) {
+                        
+                        if (clusters[other] < 0) {
+                                         
+                            rules.update(std::abs(clusters[other]), cluster_label);
+                                    
+                        }
+                        // mark as a border point
+                        atomic_min(clusters.data() + other, cluster_label);
                     }
-                    // mark as a border point
-                    atomic_min(clusters.data() + other, cluster_label);
-                }
+		        }
             }
             else if (clusters[point] == NOT_VISITED) {
                 // mark as noise
