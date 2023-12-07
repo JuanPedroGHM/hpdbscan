@@ -1,7 +1,2 @@
 build/
-_build/
-intel_build/
-gnu_build/
-a64_build/
-gnu_avx_build/
-intel_avx_build/
+*_build/
