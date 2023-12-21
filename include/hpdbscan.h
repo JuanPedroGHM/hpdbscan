@@ -57,9 +57,10 @@ class HPDBSCAN {
         Rules rules;
         Cell previous_cell = NOT_VISITED;
         std::vector<size_t> neighboring_points;
+        std::cout << "Running with vanilla cs 8212" << std::endl;
 
         // local DBSCAN run
-        #pragma omp parallel for schedule(dynamic, 32) private(neighboring_points) firstprivate(previous_cell) reduction(merge: rules)
+        #pragma omp parallel for schedule(dynamic, 8192) private(neighboring_points) firstprivate(previous_cell) reduction(merge: rules)
         for (size_t point = lower; point < upper; ++point) {
             // small optimization, we only perform a neighborhood query if it is a new cell
             Cell current_cell = index.cell_of(point);
